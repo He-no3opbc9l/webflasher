@@ -38,6 +38,12 @@ body > .banner { margin: 16px 24px 0; }
 .drop.over, .drop:hover { border-color: var(--accent); }
 .drop.has { color: var(--fg); border-style: solid; }
 .drop input { display: none; }
+#analysis { margin: 10px 0; padding: 10px 12px; border-radius: 8px; background: #0e1115; border: 1px solid var(--line); }
+#analysis.ok { border-color: var(--ok); }
+#analysis.warn { border-color: var(--warn); color: var(--fg); }
+#analysis.bad { border-color: var(--bad); }
+#analysis p { margin: 2px 0; }
+#analysis .detail { color: var(--muted); font-size: 13px; }
 .check { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; }
 .check input { margin-top: 3px; }
 #status { min-height: 1.4em; font-weight: 600; }

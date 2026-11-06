@@ -20,6 +20,11 @@ Windows: ST's WinUSB ST-Link driver. Close OpenOCD first — one program per ST-
   - optional mass erase;
   - always verified by read-back; optional full backup before, optional reset-and-run after.
 - **Compare**: chip vs file, no writes.
+- **Address detection** (`js/detect.js`): from the vector table (SP in SRAM, Thumb handlers in flash) the possible
+  bases are narrowed to a 1 KB grid; the one where the image's own code pointers land on function entries
+  (PUSH / LDR rX,[pc] / B .) wins. Full dumps (base 0x08000000, size a multiple of 16 KB) also list the inner images
+  (e.g. bootloader + application) and used blocks. The address is filled in, mass erase is unticked for partial
+  images, and a manual address that differs, an uncertain guess, all-zero (RDP) or blank files are flagged before writing.
 - **Remove protection**: option-byte erase + RDP = `0xA5` (F0/F3: `0xAA`). With RDP on the chip mass-erases itself.
   Also clears WRP; USER/DATA option bytes go to defaults.
 
@@ -33,4 +38,5 @@ polls BSY, skips `0xFFFF`, reloads IWDG. RAM use < 4 KB (fits STM32F030x4).
 - `js/fpec.js` — chip identification, FPEC unlock/erase/mass erase/program, RDP/WRP removal.
 - `js/ops.js` — backup, write, compare.
 - `js/app.js`, `js/i18n.js`, `index.html`, `style.css` — UI (RU/EN).
-- `test/read.mjs` — read-only hardware test under bun with the `usb` package (`cd test && bun add usb && bun read.mjs`).
+- `test/` (`cd test && bun install`): `read.mjs` — read-only hardware test (WebUSB via the `usb` package);
+  `detect.mjs file.bin…` — address detection on files; `ui.mjs URL file.bin…` — loads files into the page in Chrome (puppeteer).

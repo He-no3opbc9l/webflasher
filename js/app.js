@@ -1,6 +1,7 @@
 import { Stlink, STLINK_FILTERS, hex } from './stlink.js';
 import { Chip, FLASH_BASE } from './fpec.js';
 import { backup, compare, writeImage } from './ops.js';
+import { analyze } from './detect.js';
 import { t, setLang, getLang } from './i18n.js';
 
 const $ = id => document.getElementById(id);
@@ -122,6 +123,7 @@ async function connect() {
       chip = await new Chip(st).identify();
       log(`IDCODE 0x${hex(chip.idcode)}, ${chip.name}, ${chip.core}, flash ${chip.flashKB ?? '?'} KB, OBR 0x${hex(chip.obr)}, WRPR 0x${hex(chip.wrpr)}`);
       status(t('connected', { name: chip.name, kb: chip.flashKB ?? '?' }), 'ok');
+      renderAnalysis();
     } catch (e) {
       if (/NO_DEVICE|no target/.test(e.message)) e.message = `${t('noTarget')} (${e.message})`;
       link = chip = null;
@@ -144,12 +146,71 @@ async function loadFile(f) {
   if (!f) return;
   const data = new Uint8Array(await f.arrayBuffer());
   const sha = [...new Uint8Array(await crypto.subtle.digest('SHA-256', data))].map(b => hex(b, 2)).join('');
-  image = { name: f.name, data, sha };
+  const info = analyze(data);
+  image = { name: f.name, data, sha, info, massOff: false };
   $('fileinfo').textContent = t('fileLoaded', { name: f.name, size: data.length, sha: sha.slice(0, 16) });
   $('fileinfo').removeAttribute('data-i18n');
   $('drop').classList.add('has');
   log(t('fileLoaded', { name: f.name, size: data.length, sha }));
+  if (info.base != null) $('addr').value = '0x' + hex(info.base);
+  if (info.base != null && info.kind !== 'full' && $('o-mass').checked) { // keep the rest of the flash
+    $('o-mass').checked = false;
+    image.massOff = true;
+  }
+  renderAnalysis();
+  for (const el of $('analysis').querySelectorAll('p')) log(el.textContent);
   render();
+}
+
+const BAD_FILE = { zeros: 'an_zeros', blank: 'an_blank' };
+
+// What the file is, where it goes, and anything that disagrees with the current settings.
+function renderAnalysis() {
+  const box = $('analysis');
+  if (!image) { box.hidden = true; $('addrwarn').hidden = true; return; }
+  const i = image.info, d = image.data;
+  const main = [], detail = [];
+  let cls = 'ok';
+  if (BAD_FILE[i.kind]) { main.push(t(BAD_FILE[i.kind])); cls = 'bad'; }
+  else if (i.kind === 'unknown') { main.push(t('an_unknown')); cls = 'warn'; }
+  else {
+    if (i.kind === 'full') main.push(t('an_full', { kb: d.length / 1024 }));
+    else if (i.kind === 'start') main.push(t('an_start', { size: d.length }));
+    else main.push(t('an_app', { addr: hex(i.base) }));
+    if (!i.confident) { main.push(t('an_unsure', { alt: hex(i.candidates[1].base) })); cls = 'warn'; }
+    if (image.massOff) main.push(t('an_massOff'));
+    if (i.kind === 'full' && chip && chip.flashSize && chip.flashSize !== d.length) {
+      main.push(t('an_sizeDiff', { kb: d.length / 1024, chip: chip.flashKB }));
+      cls = 'warn';
+    }
+    if (i.vt) detail.push(t('an_vec', { reset: hex(i.vt.reset), sp: hex(i.vt.sp) }));
+    if (i.images.length)
+      detail.push(t('an_inner', { list: i.images.map(m => t('an_innerItem', { addr: hex(m.addr), reset: hex(m.reset) })).join(', ') }));
+    const used = i.used.slice(0, 8).map(([a, b]) => `0x${hex(a)}–0x${hex(b - 1)}`).join(', ');
+    detail.push(t('an_used', { list: used + (i.used.length > 8 ? ', …' : '') }));
+  }
+  box.className = cls;
+  box.innerHTML = '';
+  for (const [lines, c] of [[main, ''], [detail, 'detail']])
+    for (const l of lines) {
+      const p = document.createElement('p');
+      p.textContent = l;
+      if (c) p.className = c;
+      box.appendChild(p);
+    }
+  box.hidden = false;
+  const w = addrWarning();
+  $('addrwarn').textContent = w || '';
+  $('addrwarn').hidden = !w;
+}
+
+function addrWarning() {
+  const i = image?.info;
+  if (!i || BAD_FILE[i.kind]) return null;
+  if (i.base == null) return t('addrUnknown');
+  let a;
+  try { a = parseAddr(); } catch { return t('badAddr'); }
+  return a !== i.base ? t('addrDiff', { addr: hex(i.base) }) : null;
 }
 
 function parseAddr() {
@@ -163,8 +224,15 @@ function parseAddr() {
 async function doWrite() {
   const addr = parseAddr();
   const mass = $('o-mass').checked;
+  const i = image.info;
+  if (BAD_FILE[i.kind]) throw new Error(t('refuse', { why: t(BAD_FILE[i.kind]) }));
   const p = { name: image.name, size: image.data.length, addr: hex(addr) };
-  if (!confirm(t(mass ? 'confirmMass' : 'confirmWrite', p))) return;
+  const warns = [addrWarning()];
+  if (i.base != null && !i.confident) warns.push(t('an_unsure', { alt: hex(i.candidates[1].base) }));
+  if (mass && !(i.kind === 'full' && image.data.length >= chip.flashSize)) warns.push(t('warnMass'));
+  const w = warns.filter(Boolean);
+  const msg = t(mass ? 'confirmMass' : 'confirmWrite', p) + (w.length ? `\n\n${t('warn')}:\n• ${w.join('\n• ')}` : '');
+  if (!confirm(msg)) return;
   let full = null;
   if ($('o-backup').checked) {
     await link.resetHalt(); // nothing may change the flash between this backup and the write
@@ -212,6 +280,7 @@ function init() {
       setLang(b.dataset.lang);
       for (const x of document.querySelectorAll('#lang button')) x.classList.toggle('on', x === b);
       if (image) $('fileinfo').textContent = t('fileLoaded', { name: image.name, size: image.data.length, sha: image.sha.slice(0, 16) });
+      renderAnalysis();
       render();
     };
     b.classList.toggle('on', b.dataset.lang === getLang());
@@ -232,9 +301,11 @@ function init() {
   $('c-size').onchange = () => {
     const v = parseInt($('c-size').value, 10);
     if (chip) chip.flashKB = v > 0 && v <= 4096 ? v : null;
+    renderAnalysis();
     render();
   };
   $('file').onchange = e => loadFile(e.target.files[0]);
+  $('addr').oninput = renderAnalysis;
   const drop = $('drop');
   drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
   drop.ondragleave = () => drop.classList.remove('over');

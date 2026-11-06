@@ -37,7 +37,7 @@ const STR = {
     notes: `<ul>
 <li>Запись без mass erase меняет только блоки по 4 КБ, которые задевает образ; всё остальное остаётся как было, совпадающие блоки пропускаются. После записи всегда идёт сверка.</li>
 <li><b>Полный дамп</b> (бэкап всего флеша) пишется по адресу <code>0x08000000</code>.</li>
-<li><b>Прошивка без загрузчика</b> пишется по адресу, под который она собрана (часто <code>0x08001000</code>, <code>0x08004000</code> и т.п.). Узнать его можно по байтам 4–7 файла (little-endian, вектор сброса): <code>89 11 00 08</code> = <code>0x08001189</code> → прошивка собрана под <code>0x08001000</code>. Если записать её по <code>0x08000000</code>, загрузчик будет затёрт и чип не запустится.</li>
+<li><b>Прошивка без загрузчика</b> пишется по адресу, под который она собрана (часто <code>0x08001000</code>, <code>0x08004000</code> и т.п.). Сайт определяет его сам по таблице векторов и указателям в коде и подставляет в поле «Адрес». Проверить вручную можно по байтам 4–7 файла (little-endian, вектор сброса): <code>89 11 00 08</code> = <code>0x08001189</code> → прошивка собрана под <code>0x08001000</code>. Если записать её по <code>0x08000000</code>, загрузчик будет затёрт и чип не запустится.</li>
 <li>Для прошивки без загрузчика не включайте mass erase — он сотрёт загрузчик и данные.</li>
 <li>Снятие RDP стирает весь флеш вместе с загрузчиком: после этого нужен полный дамп или сначала загрузчик, потом прошивка.</li>
 <li>Некоторые прошивки при первом запуске сами включают RDP — при следующем подключении защита будет снова включена.</li>
@@ -65,6 +65,24 @@ const STR = {
     cmpSame: 'Совпадает: на чипе по адресу 0x{addr} ровно этот файл.',
     cmpDiff: 'Отличается, первое расхождение по адресу 0x{at}.',
     badAddr: 'Неверный адрес',
+    an_full: 'Полный дамп флеша ({kb} КБ) → адрес 0x08000000.',
+    an_start: 'Образ для начала флеша ({size} байт) → адрес 0x08000000.',
+    an_app: 'Прошивка без загрузчика, собрана под 0x{addr} → адрес подставлен. Всё ниже 0x{addr} (загрузчик) не трогается.',
+    an_unsure: 'Адрес определён неуверенно (возможен и 0x{alt}) — проверьте.',
+    an_vec: 'Вектор сброса 0x{reset}, стек 0x{sp}.',
+    an_inner: 'Внутри: {list}.',
+    an_innerItem: 'образ 0x{addr} (сброс 0x{reset})',
+    an_used: 'Занято: {list}.',
+    an_unknown: 'Таблица векторов не найдена: файл зашифрован или это не прошивка ARM Cortex-M. Адрес не определён — проверьте вручную.',
+    an_zeros: 'Файл из одних нулей — так выглядит дамп чипа с включённой защитой RDP. Прошивать его нельзя.',
+    an_blank: 'Файл пустой (все байты 0xFF), прошивать нечего.',
+    an_massOff: 'Mass erase выключен, чтобы не стереть остальной флеш.',
+    an_sizeDiff: 'Размер дампа ({kb} КБ) не совпадает с флешем чипа ({chip} КБ).',
+    addrDiff: 'Адрес отличается от определённого по файлу (0x{addr})!',
+    addrUnknown: 'Адрес по файлу не определён, проверьте его вручную.',
+    warn: 'ВНИМАНИЕ',
+    warnMass: 'Включён mass erase: всё вне образа (загрузчик, данные) будет стёрто.',
+    refuse: 'Этот файл прошивать нельзя: {why}',
     error: 'Ошибка: {msg}',
   },
   en: {
@@ -104,7 +122,7 @@ const STR = {
     notes: `<ul>
 <li>Without mass erase only the 4 KB blocks the image touches are rewritten; everything else is kept and unchanged blocks are skipped. Every write is verified by reading back.</li>
 <li>A <b>full dump</b> (backup of the whole flash) goes to <code>0x08000000</code>.</li>
-<li><b>Firmware without the bootloader</b> goes to the address it was built for (often <code>0x08001000</code>, <code>0x08004000</code> etc.). Bytes 4–7 of the file (little-endian, reset vector) tell it: <code>89 11 00 08</code> = <code>0x08001189</code> → built for <code>0x08001000</code>. Written at <code>0x08000000</code> it overwrites the bootloader and the chip will not start.</li>
+<li><b>Firmware without the bootloader</b> goes to the address it was built for (often <code>0x08001000</code>, <code>0x08004000</code> etc.). The site detects it from the vector table and the code pointers and fills in the Address field. To check by hand: bytes 4–7 of the file (little-endian, reset vector) tell it: <code>89 11 00 08</code> = <code>0x08001189</code> → built for <code>0x08001000</code>. Written at <code>0x08000000</code> it overwrites the bootloader and the chip will not start.</li>
 <li>Do not enable mass erase for firmware without the bootloader — it wipes the bootloader and data.</li>
 <li>Removing RDP erases the whole flash, bootloader included: afterwards write a full dump, or the bootloader first and then the firmware.</li>
 <li>Some firmware turns RDP on at first boot — the next connection will show protection again.</li>
@@ -131,6 +149,24 @@ const STR = {
     cmpSame: 'Match: the chip holds exactly this file at 0x{addr}.',
     cmpDiff: 'Differs, first mismatch at 0x{at}.',
     badAddr: 'Bad address',
+    an_full: 'Full flash dump ({kb} KB) → address 0x08000000.',
+    an_start: 'Image for the start of flash ({size} bytes) → address 0x08000000.',
+    an_app: 'Firmware without the bootloader, built for 0x{addr} → address filled in. Everything below 0x{addr} (bootloader) is kept.',
+    an_unsure: 'Address uncertain (0x{alt} also possible) — check it.',
+    an_vec: 'Reset vector 0x{reset}, stack 0x{sp}.',
+    an_inner: 'Contains: {list}.',
+    an_innerItem: 'image 0x{addr} (reset 0x{reset})',
+    an_used: 'Used: {list}.',
+    an_unknown: 'No vector table: the file is encrypted or not ARM Cortex-M firmware. Address unknown — check it manually.',
+    an_zeros: 'The file is all zeros — that is what a dump of an RDP-protected chip looks like. Do not flash it.',
+    an_blank: 'The file is empty (all bytes 0xFF), nothing to flash.',
+    an_massOff: 'Mass erase turned off so the rest of the flash is kept.',
+    an_sizeDiff: 'Dump size ({kb} KB) differs from the chip flash ({chip} KB).',
+    addrDiff: 'Address differs from the one detected in the file (0x{addr})!',
+    addrUnknown: 'Address not detected from the file, check it manually.',
+    warn: 'WARNING',
+    warnMass: 'Mass erase is on: everything outside the image (bootloader, data) will be erased.',
+    refuse: 'This file must not be flashed: {why}',
     error: 'Error: {msg}',
   },
 };

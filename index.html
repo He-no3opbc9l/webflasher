@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>WebFlash — AT32 / STM32 via ST-Link</title>
+<link rel="icon" href="data:,">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -70,9 +71,11 @@
       <input id="file" type="file" accept=".bin,application/octet-stream">
       <span id="fileinfo" data-i18n="drop"></span>
     </label>
+    <div id="analysis" hidden></div>
     <div class="row">
       <label><span data-i18n="addr"></span> <input id="addr" class="mono" value="0x08000000" size="12"></label>
     </div>
+    <p id="addrwarn" class="banner bad" hidden></p>
     <label class="check"><input id="o-backup" type="checkbox" checked> <span data-i18n="optBackup"></span></label>
     <label class="check"><input id="o-mass" type="checkbox"> <span data-i18n="optMass"></span></label>
     <label class="check"><input id="o-run" type="checkbox" checked> <span data-i18n="optRun"></span></label>

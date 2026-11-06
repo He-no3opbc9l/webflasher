@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "dependencies": {
+    "puppeteer-core": "^25.16.0",
+    "usb": "^3.2.1"
+  }
+}
