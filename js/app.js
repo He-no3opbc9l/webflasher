@@ -178,7 +178,7 @@ async function doWrite() {
     await link.resetRun();
     log(t('started'));
     await sleep(500);
-    await chip.readProtection().catch(() => {}); // stock Ninebot firmware may turn RDP back on now
+    await chip.readProtection().catch(() => {}); // some firmware turns RDP back on at first boot
   }
 }
 

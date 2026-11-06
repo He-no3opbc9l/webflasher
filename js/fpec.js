@@ -1,5 +1,5 @@
 // F1-style flash controller (FPEC @ 0x40022000): Artery AT32F4xx, STM32F0/F1/F3, GD32F1/F3 and clones.
-// Same register map as common/flashit.cfg; programming goes through a small RAM stub (stub/stub.S).
+// Programming goes through a small RAM stub (stub/stub.S).
 import { CPUID, hex } from './stlink.js';
 
 export const FLASH_BASE = 0x08000000;

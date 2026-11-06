@@ -33,22 +33,14 @@ const STR = {
     write: 'Записать',
     compare: 'Сверить с чипом',
     log: 'Журнал',
-    notesTitle: 'Подсказки',
+    notesTitle: 'Особенности прошивки',
     notes: `<ul>
-<li>Подключение: SWDIO, SWCLK, GND и, если плата не запитана, 3.3V. Перед этим закройте OpenOCD / st-util / STM32CubeProgrammer — ST-Link может держать только одна программа.</li>
-<li>Linux: нужен доступ к USB-устройству <code>0483:3748</code>, правило udev:<br><code>SUBSYSTEM=="usb", ATTRS{idVendor}=="0483", MODE="0666", TAG+="uaccess"</code></li>
-<li>Windows: нужен драйвер ST-Link от ST (STSW-LINK009, WinUSB).</li>
-<li>Запись без mass erase меняет только блоки по 4 КБ, которые задевает образ; всё остальное (загрузчик, настройки) остаётся как было. Неизменившиеся блоки пропускаются.</li>
-<li>Ninebot: штатная прошивка контроллера при первом запуске снова включает RDP — следующее подключение покажет защиту, это нормально.</li>
-</ul>
-<h3>Полный дамп или дамп без загрузчика?</h3>
-<ul>
-<li>Посмотрите на байты 4–7 файла (little-endian) — это адрес обработчика сброса. Например, <code>89 11 00 08</code> = <code>0x08001189</code>: прошивка собрана под <code>0x08001000</code>. <code>21 01 00 08</code> = <code>0x08000121</code>: под <code>0x08000000</code>. Адрес записи — это начало блока, куда указывает вектор (обычно кратно 0x400–0x1000).</li>
-<li><b>Полный дамп</b> (бэкап с этого сайта, OpenOCD <code>dump_image</code>; размер = весь флеш, например 128 или 256 КБ): адрес <code>0x08000000</code>. Mass erase не обязателен — файл всё равно перекрывает весь флеш. Вместе с ним вернутся загрузчик, настройки и пробег.</li>
-<li><b>Прошивка без загрузчика</b> (только приложение, например <code>DRV.bin</code> из обновления Ninebot): адрес начала приложения. У контроллеров Ninebot (S90L, Max G2) загрузчик занимает 4 КБ, приложение — с <code>0x08001000</code>. <b>Не пишите приложение по 0x08000000</b> — затрёте загрузчик, контроллер не запустится.</li>
-<li>Для прошивки без загрузчика <b>не включайте mass erase</b>: он сотрёт загрузчик и настройки. Без него сайт перепишет только блоки приложения, загрузчик и настройки останутся.</li>
-<li>Если на чипе был RDP, снятие защиты стёрло всё, включая загрузчик. Тогда сначала запишите загрузчик (4 КБ) по <code>0x08000000</code>, затем приложение по <code>0x08001000</code> — или просто полный дамп.</li>
-<li>Если не уверены — сначала «Сверить с чипом» на заведомо исправной плате: при правильном адресе почти всё совпадёт.</li>
+<li>Запись без mass erase меняет только блоки по 4 КБ, которые задевает образ; всё остальное остаётся как было, совпадающие блоки пропускаются. После записи всегда идёт сверка.</li>
+<li><b>Полный дамп</b> (бэкап всего флеша) пишется по адресу <code>0x08000000</code>.</li>
+<li><b>Прошивка без загрузчика</b> пишется по адресу, под который она собрана (часто <code>0x08001000</code>, <code>0x08004000</code> и т.п.). Узнать его можно по байтам 4–7 файла (little-endian, вектор сброса): <code>89 11 00 08</code> = <code>0x08001189</code> → прошивка собрана под <code>0x08001000</code>. Если записать её по <code>0x08000000</code>, загрузчик будет затёрт и чип не запустится.</li>
+<li>Для прошивки без загрузчика не включайте mass erase — он сотрёт загрузчик и данные.</li>
+<li>Снятие RDP стирает весь флеш вместе с загрузчиком: после этого нужен полный дамп или сначала загрузчик, потом прошивка.</li>
+<li>Некоторые прошивки при первом запуске сами включают RDP — при следующем подключении защита будет снова включена.</li>
 </ul>`,
     // dynamic
     connecting: 'Подключение…',
@@ -108,22 +100,14 @@ const STR = {
     write: 'Write',
     compare: 'Compare with chip',
     log: 'Log',
-    notesTitle: 'Notes',
+    notesTitle: 'Flashing notes',
     notes: `<ul>
-<li>Wiring: SWDIO, SWCLK, GND and 3.3V if the board is not powered. Close OpenOCD / st-util / STM32CubeProgrammer first — only one program can hold the ST-Link.</li>
-<li>Linux: the user needs access to USB device <code>0483:3748</code>, udev rule:<br><code>SUBSYSTEM=="usb", ATTRS{idVendor}=="0483", MODE="0666", TAG+="uaccess"</code></li>
-<li>Windows: install ST's ST-Link driver (STSW-LINK009, WinUSB).</li>
-<li>Without mass erase only the 4 KB blocks the image touches are rewritten; everything else (bootloader, settings) stays as it was. Unchanged blocks are skipped.</li>
-<li>Ninebot: the stock controller firmware turns RDP back on at first boot — the next connection will show protection, that is expected.</li>
-</ul>
-<h3>Full dump or dump without the bootloader?</h3>
-<ul>
-<li>Look at bytes 4–7 of the file (little-endian): the reset handler address. E.g. <code>89 11 00 08</code> = <code>0x08001189</code>: linked for <code>0x08001000</code>; <code>21 01 00 08</code> = <code>0x08000121</code>: linked for <code>0x08000000</code>. The write address is the start of the block the vector points into (usually a multiple of 0x400–0x1000).</li>
-<li><b>Full dump</b> (a backup from this site, OpenOCD <code>dump_image</code>; size = the whole flash, e.g. 128 or 256 KB): address <code>0x08000000</code>. Mass erase is optional — the file covers the whole flash anyway. Bootloader, settings and odometer come back with it.</li>
-<li><b>Firmware without the bootloader</b> (application only, e.g. <code>DRV.bin</code> from a Ninebot update): the application start address. On Ninebot controllers (S90L, Max G2) the bootloader is 4 KB and the application starts at <code>0x08001000</code>. <b>Do not write the application at 0x08000000</b> — that overwrites the bootloader and the controller will not start.</li>
-<li>For an application-only image <b>do not enable mass erase</b>: it wipes the bootloader and settings. Without it only the application blocks are rewritten; bootloader and settings stay.</li>
-<li>If the chip had RDP, removing it erased everything, the bootloader too. Then write the bootloader (4 KB) at <code>0x08000000</code> first, then the application at <code>0x08001000</code> — or simply a full dump.</li>
-<li>Not sure? Run "Compare with chip" on a known-good board first: with the right address almost everything matches.</li>
+<li>Without mass erase only the 4 KB blocks the image touches are rewritten; everything else is kept and unchanged blocks are skipped. Every write is verified by reading back.</li>
+<li>A <b>full dump</b> (backup of the whole flash) goes to <code>0x08000000</code>.</li>
+<li><b>Firmware without the bootloader</b> goes to the address it was built for (often <code>0x08001000</code>, <code>0x08004000</code> etc.). Bytes 4–7 of the file (little-endian, reset vector) tell it: <code>89 11 00 08</code> = <code>0x08001189</code> → built for <code>0x08001000</code>. Written at <code>0x08000000</code> it overwrites the bootloader and the chip will not start.</li>
+<li>Do not enable mass erase for firmware without the bootloader — it wipes the bootloader and data.</li>
+<li>Removing RDP erases the whole flash, bootloader included: afterwards write a full dump, or the bootloader first and then the firmware.</li>
+<li>Some firmware turns RDP on at first boot — the next connection will show protection again.</li>
 </ul>`,
     connecting: 'Connecting…',
     connected: 'Connected: {name}, flash {kb} KB',
